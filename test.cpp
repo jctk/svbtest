@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-//#include <pthread.h>
 #include <unistd.h>
 #include <malloc.h>
 
@@ -71,12 +70,6 @@ int main(int argc, char** argv)
         SVB_SUPPORTED_MODE CameraSupportMode;
         if (SVB_SUCCESS != (ret = SVBGetCameraSupportMode(iCameraID, &CameraSupportMode)))
             throw SVBAPIERR(ret, "SVBGetCameraSupportMode");
-
-        // Allocate image buffer
-        long buffer_size = (CameraProperty.MaxBitDepth + 7) / 8 * CameraProperty.MaxHeight*CameraProperty.MaxWidth * 4;
-
-        unsigned char* buffer = (unsigned char*)malloc(buffer_size);
-        memset(buffer, 0, buffer_size);
 
         int controlsNum;
         if (SVB_SUCCESS != (ret = SVBGetNumOfControls(iCameraID, &controlsNum)))
@@ -188,6 +181,7 @@ int main(int argc, char** argv)
             { 0, 0, 192, 192 },
             { 0, 0, 192, 192 }            
         };
+        unsigned char* buffer = NULL;
         for (int j = 0; j < sizeof(rois)/sizeof(rois[0]); j++) {
             printf("#%d\n", j);
             if (SVB_SUCCESS != (ret = SVBSetROIFormat(iCameraID, rois[j].x, rois[j].y, rois[j].w, rois[j].h, 1)))
@@ -197,6 +191,11 @@ int main(int argc, char** argv)
             if (SVB_SUCCESS != (ret = SVBGetROIFormat(iCameraID, &x, &y, &w, &h, &b)))
                 throw SVBAPIERR(ret, "");
             printf("ROI(%d, %d, %d, %d, %d)\n", x, y, w, h, b);
+
+            // Allocate image buffer
+            long buffer_size = (CameraProperty.MaxBitDepth + 7) / 8 * w*h*4;
+            buffer = (unsigned char*)realloc(buffer, buffer_size);
+            memset(buffer, 0, buffer_size);
 
             if (SVB_SUCCESS != (ret = SVBStartVideoCapture(iCameraID)))
                 throw SVBAPIERR(ret, "");
@@ -221,15 +220,17 @@ int main(int argc, char** argv)
 
             if (SVB_SUCCESS != (ret = SVBStopVideoCapture(iCameraID)))
                 throw SVBAPIERR(ret, "");
+
+            // write captured image.
+            char fname[255];
+            sprintf(fname, "./raw-%d.img", j);
+            FILE *fp = fopen(fname, "w");
+            fwrite(buffer, buffer_size, 1, fp);
+            fclose(fp);
         }
 
         if (SVB_SUCCESS != (ret = SVBCloseCamera(iCameraID)))
             throw SVBAPIERR(ret, "");
-
-
-        FILE *fp = fopen("./xxx.img", "w");
-        fwrite(buffer, buffer_size, 1, fp);
-        fclose(fp);
 
         /*
             test cooling
